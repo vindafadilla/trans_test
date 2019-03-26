@@ -9,7 +9,7 @@ import cgi
 def html_show():
     cgitb.enable()
     form = cgi.FieldStorage()
-    lister = ['a', 'b', 'c']
+    lister = ['2014', '2015', '2016', '2017','2018','2019']
 
     html_list = ''
     for value in lister:
