@@ -1,35 +1,22 @@
 #!C:/Users/asus/AppData/Local/Programs/Python/Python37/python.exe
+
+##---------------Library--------------------##
+
+# Run in xampp
+# https://stackoverflow.com/questions/42704846/running-python-scripts-with-xampp
+
+# Install mysql-connector:
+#     pip install mysql - connector
+# Install simplejson:
+#     pip install simplejson
+# cgi (default)
 import mysql.connector
 from mysql.connector import Error
 import json
-import cgitb
 import cgi
+import cgitb
 
-
-def html_show():
-    cgitb.enable()
-    form = cgi.FieldStorage()
-    lister = ['2014', '2015', '2016', '2017','2018','2019']
-
-    html_list = ''
-    for value in lister:
-        html_list += '<option value={0}>{0}</option>'.format(value)
-
-    html = """Content-type: text/html\n
-
-    <html>
-    <head>
-    </head>
-    <body>
-    <select>
-       {}
-    </select>
-    </body>
-    </html>
-    """.format(html_list)
-    print(html)
-
-
+##---------------Module to format html and save it into a txt file--------------------##
 def html_handle(data_lulusan, total_all, tahun):
     title = "<h3>Data Divisi</h3>"
     table_prefix="<div><table border=1>"
@@ -55,57 +42,54 @@ def html_handle(data_lulusan, total_all, tahun):
         table_html+="<td>"+str(total_all[i])+"</td>"
 
     table_html+=tfoot_sufix+table_sufix
-    # print(table_html)
     send_to_file = str(tahun) + '.txt'
     if send_to_file:
         # Writing JSON data
         with open(send_to_file, 'w') as f:
             json.dump([table_html], f)
 
-def total_tahun(mycursor,index):
-    # print(index)
-    sql_select_total = "select SUM(`SD`),SUM(`SMP`),SUM(`SMA`), SUM(`D1`+`D2`+`D3`) as dip, SUM(`S1`), SUM(`S2`), SUM(`S3`) FROM data_lulus where tahun='"+str(index)+"'"
+##---------------Module to add data into an array--------------------##
+def list_data_tahun(mycursor,index, divisi):
+    tambah = []
+    sql_select_data = "select SUM(`SD`),SUM(`SMP`),SUM(`SMA`), SUM(`D1`+`D2`+`D3`) as dip, SUM(`S1`), SUM(`S2`), SUM(`S3`) FROM data_lulus where tahun='" + str(index) + "'"
 
-    mycursor.execute(sql_select_total)
-    tambah=[]
-    for row in mycursor.fetchall():
-        tambah = [int(row[0]), int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[5]), int(row[6])]
+    if divisi!=None:
+        sql_select_data+=" and `divisi`='"+divisi+"'"
+
+    mycursor.execute(sql_select_data)
+    data_hasil = mycursor.fetchall()
+
+    for row in data_hasil:
+        if row[0] is not None:
+            tambah = [int(row[0]), int(row[1]), int(row[2]), int(row[3]), int(row[4]), int(row[5]), int(row[6])]
+        else:
+            tambah=[0,0,0,0,0,0,0]
 
     return tambah
 
-def sort_tahun(mydb,index):
-    # print(mydb, index)
-    sql_select_divisi = "select distinct divisi from data_lulus where tahun='"+str(index-1)+"' or tahun='"+str(index)+"'"
-    mycursor = mydb.cursor()
-    mycursor.execute(sql_select_divisi)
-
+##---------------Module to add data per year--------------------##
+def sort_tahun(mycursor,index):
     divisiArr = []
+    data_lulus = []
+    total_all =[]
+
+    sql_select_divisi = "select distinct divisi from data_lulus where tahun='"+str(index-1)+"' or tahun='"+str(index)+"'"
+    mycursor.execute(sql_select_divisi)
 
     for row in mycursor.fetchall():
         divisiArr.append(row[0])
 
-    # print(divisiArr)
-
-    data_lulus = []
-    total_all =[]
-
     for i in range(len(divisiArr)):
         data_ = [divisiArr[i]]
-        sql_select_data = "select `SD`,`SMP`,`SMA`, (`D1`+`D2`+`D3`) as dip, `S1`, `S2`, `S3` FROM data_lulus where (tahun='"+str(index-1)+"' or tahun='"+str(index)+"') and `divisi`="+" '"+divisiArr[i]+"'"
-        # print(sql_select_data)
-        mycursor.execute(sql_select_data)
-        for row in mycursor.fetchall():
-            tambah = [row[0],row[1],row[2],row[3],row[4],row[5],row[6]]
-            data_.extend(tambah)
+        data_.extend(list_data_tahun(mycursor, index-1, divisiArr[i]))
+        data_.extend(list_data_tahun(mycursor, index, divisiArr[i]))
         data_lulus.append(data_)
+    total_all.extend(list_data_tahun(mycursor, index-1, None))
+    total_all.extend(list_data_tahun(mycursor, index, None))
 
-    for i in range(index-1,index+1):
-        if(i>2013 & i<2020):
-            total_all.extend(total_tahun(mycursor, i))
-
-    # print(data_lulus,total_all)
     html_handle(data_lulus, total_all, index)
 
+##---------------Main Module--------------------##
 if __name__ == '__main__':
     try:
         mydb = mysql.connector.connect(
@@ -114,10 +98,24 @@ if __name__ == '__main__':
             passwd="",
             database="data_perusahaan"
         )
+        mycursor = mydb.cursor()
 
         for i in range(2014,2020):
-            sort_tahun(mydb,i)
+            sort_tahun(mycursor,i)
 
-        html_show()
+        cgitb.enable()
+        print ("Content-type: text/html\n\n")
+        form = cgi.FieldStorage()
+        # Get data from fields
+        if form.getvalue('dropdown'):
+            subject = form.getvalue('dropdown')
+            html_file = subject + '.txt'
+            f = open(html_file, 'r')
+            content = f.read().replace('["','').replace('"]','')
+            print (content)
+            f.close()
+        else:
+            subject = "Not entered"
+
     except Error as e:
         print("Error while connecting to MySQL", e)
